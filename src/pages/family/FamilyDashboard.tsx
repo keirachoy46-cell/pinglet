@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
-  Bell, Plus, UserPlus, Play, Heart, AlertTriangle,
+  Bell, Plus, UserPlus, Play, AlertTriangle,
   LogOut, Clock, CheckCircle2, XCircle, HelpCircle, MessageSquare
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import DailySummaryCard from "@/components/family/DailySummaryCard";
+import InsightsSection from "@/components/family/InsightsSection";
 
 type ElderProfile = Tables<"elder_profiles">;
 type NotificationInstance = Tables<"notification_instances">;
@@ -193,8 +194,16 @@ export default function FamilyDashboard() {
           </Button>
         </div>
 
-        {selectedElderId && (
+        {selectedElderId && user && (
           <>
+            {/* Daily Summary Card */}
+            <DailySummaryCard
+              elderId={selectedElderId}
+              elderName={selectedElder?.display_name || ""}
+              relationshipLabel={selectedElder?.relationship_label}
+              userId={user.id}
+            />
+
             {/* Quick Actions */}
             <Card className="border-0 shadow-md">
               <CardHeader className="pb-3">
@@ -277,6 +286,9 @@ export default function FamilyDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Insights Section */}
+            <InsightsSection elderId={selectedElderId} />
           </>
         )}
       </main>
