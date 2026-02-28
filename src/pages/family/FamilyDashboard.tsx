@@ -20,6 +20,7 @@ import {
 import type { Tables } from "@/integrations/supabase/types";
 import DailySummaryCard from "@/components/family/DailySummaryCard";
 import InsightsSection from "@/components/family/InsightsSection";
+import MoodTrackingSettings from "@/components/family/MoodTrackingSettings";
 
 type ElderProfile = Tables<"elder_profiles">;
 type NotificationInstance = Tables<"notification_instances">;
@@ -352,6 +353,9 @@ export default function FamilyDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Mood Tracking Settings */}
+            <MoodTrackingSettings elderId={selectedElderId} />
 
             {/* Insights Section */}
             <InsightsSection elderId={selectedElderId} />
