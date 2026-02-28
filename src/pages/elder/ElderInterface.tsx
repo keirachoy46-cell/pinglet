@@ -49,6 +49,8 @@ export default function ElderInterface() {
   const [ackText, setAckText] = useState("");
 
   const [processingLabel, setProcessingLabel] = useState("");
+  const [showPlayButton, setShowPlayButton] = useState(false);
+  const [ttsPlayed, setTtsPlayed] = useState(false);
 
   const recorder = useVoiceRecorder();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -84,6 +86,42 @@ export default function ElderInterface() {
     };
     fetchData();
   }, [elderProfileId]);
+
+  const hasPendingReminder = !!pendingInstance;
+
+  // Auto-play TTS of reminder message when elder view loads
+  useEffect(() => {
+    if (!hasPendingReminder || !elder || ttsPlayed || activeView !== "home") return;
+    setTtsPlayed(true);
+
+    const autoPlayTTS = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("tts-generate", {
+          body: { text: pendingInstance?.template?.message_text || "", language: elder.preferred_language },
+        });
+        if (error || !data?.audioContent) return;
+
+        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+        audioRef.current = audio;
+        try {
+          await audio.play();
+        } catch {
+          setShowPlayButton(true);
+        }
+      } catch (err) {
+        console.error("Auto TTS error:", err);
+      }
+    };
+
+    autoPlayTTS();
+  }, [hasPendingReminder, elder, ttsPlayed, activeView, pendingInstance]);
+
+  const handleManualPlay = () => {
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => {});
+      setShowPlayButton(false);
+    }
+  };
 
   // --- AUDIO HELPERS ---
   const playBase64Audio = useCallback((base64: string): Promise<void> => {
@@ -309,7 +347,6 @@ export default function ElderInterface() {
     );
   }
 
-  const hasPendingReminder = !!pendingInstance;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -356,6 +393,16 @@ export default function ElderInterface() {
                   <p className="text-xl md:text-2xl text-foreground/80 leading-relaxed">
                     {pendingInstance.template?.message_text || "You have a pending notification."}
                   </p>
+                  {showPlayButton && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full h-14 text-xl font-display gap-3 border-2 border-primary"
+                      onClick={handleManualPlay}
+                    >
+                      <Volume2 className="h-6 w-6" /> Play Message
+                    </Button>
+                  )}
                   <Button
                     size="lg"
                     className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
