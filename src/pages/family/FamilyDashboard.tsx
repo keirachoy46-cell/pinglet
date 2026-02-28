@@ -193,7 +193,7 @@ export default function FamilyDashboard() {
             <UserPlus className="h-4 w-4" /> Create Profile
           </Button>
           {selectedElderId && (
-            <Button variant="default" size="sm" onClick={() => window.open(`/elder/${selectedElderId}`, '_blank')} className="gap-2">
+            <Button variant="default" size="sm" onClick={() => navigate(`/elder/${selectedElderId}`)} className="gap-2">
               <Play className="h-4 w-4" /> Open Elder View
             </Button>
           )}
