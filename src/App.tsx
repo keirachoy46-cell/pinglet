@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import FamilyDashboard from "./pages/family/FamilyDashboard";
 import CreateElder from "./pages/family/CreateElder";
+import EditElder from "./pages/family/EditElder";
 import CreateNotification from "./pages/family/CreateNotification";
 import EditNotification from "./pages/family/EditNotification";
 import ElderInterface from "./pages/elder/ElderInterface";
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/family" element={<ProtectedRoute><FamilyDashboard /></ProtectedRoute>} />
             <Route path="/family/create-elder" element={<ProtectedRoute><CreateElder /></ProtectedRoute>} />
             <Route path="/family/create-notification" element={<ProtectedRoute><CreateNotification /></ProtectedRoute>} />
+            <Route path="/family/edit-elder/:elderId" element={<ProtectedRoute><EditElder /></ProtectedRoute>} />
             <Route path="/family/edit-notification/:templateId" element={<ProtectedRoute><EditNotification /></ProtectedRoute>} />
             <Route path="/elder/:elderProfileId" element={<ElderInterface />} />
             <Route path="*" element={<NotFound />} />
