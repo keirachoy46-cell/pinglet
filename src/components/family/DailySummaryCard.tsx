@@ -210,9 +210,6 @@ export default function DailySummaryCard({ elderId, elderName, relationshipLabel
             <Sparkles className="h-4 w-4 text-primary" />
           )}
           Daily Summary
-          <Badge variant="outline" className="text-[10px] ml-auto">
-            Template {template.type}
-          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
