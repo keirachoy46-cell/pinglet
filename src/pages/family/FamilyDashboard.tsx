@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ const STATUS_CONFIG: Record<string, {label: string; variant: "default" | "second
 export default function FamilyDashboard() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [elders, setElders] = useState<ElderProfile[]>([]);
   const [selectedElderId, setSelectedElderId] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export default function FamilyDashboard() {
   useEffect(() => {
     if (!selectedElderId) return;
     refreshData();
-  }, [selectedElderId]);
+  }, [selectedElderId, location.key]);
 
   const triggerReminder = async (templateId: string) => {
     if (!selectedElderId) return;
@@ -321,17 +322,6 @@ export default function FamilyDashboard() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {inst.status === "pending" && (
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                                onClick={() => triggerReminder(inst.template_id)}
-                                title="Re-trigger this reminder"
-                              >
-                                <Play className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
                             <Badge variant={cfg.variant} className="gap-1">
                               {cfg.icon} {cfg.label}
                             </Badge>
