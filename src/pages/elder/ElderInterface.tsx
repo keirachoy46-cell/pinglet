@@ -66,7 +66,7 @@ export default function ElderInterface() {
           .select("*")
           .eq("elder_profile_id", elderProfileId)
           .eq("status", "pending")
-          .order("scheduled_at", { ascending: true })
+          .order("created_at", { ascending: false })
           .limit(1),
         supabase.from("mood_settings").select("*").eq("elder_profile_id", elderProfileId).single(),
       ]);
