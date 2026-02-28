@@ -201,13 +201,12 @@ export default function ElderInterface() {
   }, []);
 
   // --- REPLY FLOW ---
-  const startReplyFlow = useCallback(async () => {
+  const startReplyFlow = useCallback(() => {
     if (!pendingInstance?.template || !elder) return;
     setActiveView("reply");
     setReplyStep("recording");
-    // Immediately start recording
-    await recorder.startRecording();
-  }, [pendingInstance, elder, recorder]);
+    // Don't auto-start recording here — let the user tap the record button
+  }, [pendingInstance, elder]);
 
   const stopReplyRecording = useCallback(async () => {
     const blob = await recorder.stopRecording();
@@ -495,22 +494,39 @@ export default function ElderInterface() {
             <CardContent className="p-6 md:p-8 space-y-6 text-center">
               {replyStep === "recording" && (
                 <>
-                  <div className="relative mx-auto w-40 h-40">
-                    <div className="absolute inset-0 rounded-full bg-destructive/20 animate-pulse" />
-                    <Mic className="h-16 w-16 text-destructive absolute inset-0 m-auto" />
-                  </div>
-                  <p className="text-2xl font-display text-foreground font-semibold">
-                    Recording your reply...
-                  </p>
-                  <p className="text-lg text-muted-foreground">Press Stop when you're done</p>
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
-                    onClick={stopReplyRecording}
-                  >
-                    <Square className="h-8 w-8" /> Stop
-                  </Button>
+                  {recorder.isRecording ? (
+                    <>
+                      <div className="relative mx-auto w-40 h-40">
+                        <div className="absolute inset-0 rounded-full bg-destructive/20 animate-pulse" />
+                        <Mic className="h-16 w-16 text-destructive absolute inset-0 m-auto" />
+                      </div>
+                      <p className="text-2xl font-display text-foreground font-semibold">
+                        Recording your reply...
+                      </p>
+                      <p className="text-lg text-muted-foreground">Press Stop when you're done</p>
+                      <Button
+                        size="lg"
+                        variant="destructive"
+                        className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
+                        onClick={stopReplyRecording}
+                      >
+                        <Square className="h-8 w-8" /> Stop
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-display text-foreground font-semibold">
+                        Tap to record your reply
+                      </p>
+                      <Button
+                        size="lg"
+                        className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
+                        onClick={() => recorder.startRecording()}
+                      >
+                        <Mic className="h-8 w-8" /> Start Recording
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
 
