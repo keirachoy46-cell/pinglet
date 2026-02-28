@@ -268,18 +268,6 @@ export default function ElderInterface() {
     setMoodStep("voice");
   };
 
-  const handleMoodVoice = useCallback(async (skipVoice: boolean) => {
-    if (!skipVoice && recorder.isRecording) {
-      const blob = await recorder.stopRecording();
-      await processMoodEntry(blob);
-    } else if (!skipVoice) {
-      await recorder.startRecording();
-      return;
-    } else {
-      await processMoodEntry(null);
-    }
-  }, [recorder]);
-
   const processMoodEntry = useCallback(async (voiceBlob: Blob | null) => {
     if (!elder || selectedMoodScore === null) return;
     setMoodStep("processing");
@@ -326,6 +314,18 @@ export default function ElderInterface() {
       setMoodStep("score");
     }
   }, [elder, selectedMoodScore, selectedTags, transcribeAudio, generateAndPlayTTS]);
+
+  const handleMoodVoice = useCallback(async (skipVoice: boolean) => {
+    if (!skipVoice && recorder.isRecording) {
+      const blob = await recorder.stopRecording();
+      await processMoodEntry(blob);
+    } else if (!skipVoice) {
+      await recorder.startRecording();
+      return;
+    } else {
+      await processMoodEntry(null);
+    }
+  }, [recorder, processMoodEntry]);
 
   const resetToHome = () => {
     setActiveView("home");
