@@ -8,8 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Mic, Square, Play, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Mic, Square, Play, Check, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 const TASK_TYPES = [
   { value: "medication", label: "💊 Medication" },
@@ -42,6 +46,7 @@ export default function CreateNotification() {
   // Step 3: Schedule + Frequency
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [frequency, setFrequency] = useState("daily");
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined);
 
   // Step 4: Voice mode
   const [voiceMode, setVoiceMode] = useState<"tts_default" | "family_recorded">("tts_default");
@@ -231,10 +236,39 @@ export default function CreateNotification() {
                     <SelectContent>
                       <SelectItem value="daily">Daily</SelectItem>
                       <SelectItem value="twice_daily">Twice Daily</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
+                      <SelectItem value="once">One-time (pick date)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {frequency === "once" && (
+                  <div className="space-y-2">
+                    <Label>Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !scheduleDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {scheduleDate ? format(scheduleDate, "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={scheduleDate}
+                          onSelect={setScheduleDate}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
               </div>
             )}
 
