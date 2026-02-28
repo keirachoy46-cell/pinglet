@@ -213,28 +213,6 @@ export default function FamilyDashboard() {
               userId={user.id}
             />
 
-            {/* Quick Actions */}
-            <Card className="border-0 shadow-md">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-display">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/family/create-notification?elderId=${selectedElderId}`)}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" /> Create Notification
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={runDailyCheck} className="gap-2">
-                    <AlertTriangle className="h-4 w-4" /> Run Daily Check
-                  </Button>
-                </div>
-
-              </CardContent>
-            </Card>
 
             {/* Notification Templates */}
             {templates.length > 0 && (
