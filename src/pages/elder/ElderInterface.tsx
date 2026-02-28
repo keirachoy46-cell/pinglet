@@ -89,19 +89,37 @@ export default function ElderInterface() {
 
   const hasPendingReminder = !!pendingInstance;
 
+  // Browser-native TTS helper
+  const speakText = useCallback((text: string, language: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!('speechSynthesis' in window)) { resolve(); return; }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.85;
+      utterance.lang = language === "Hindi" ? "hi-IN" : language === "Tamil" ? "ta-IN" : language === "Telugu" ? "te-IN" : language === "Bengali" ? "bn-IN" : language === "Spanish" ? "es-ES" : language === "French" ? "fr-FR" : language === "German" ? "de-DE" : language === "Arabic" ? "ar-SA" : language === "Chinese" ? "zh-CN" : language === "Japanese" ? "ja-JP" : language === "Korean" ? "ko-KR" : "en-US";
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      window.speechSynthesis.speak(utterance);
+    });
+  }, []);
+
   // Auto-play TTS of reminder message when elder view loads
   useEffect(() => {
     if (!hasPendingReminder || !elder || ttsPlayed || activeView !== "home") return;
     setTtsPlayed(true);
 
+    const text = pendingInstance?.template?.message_text || "";
+    if (!text) return;
+
+    // Try ElevenLabs first, fall back to browser TTS
     const autoPlayTTS = async () => {
       try {
         const { data, error } = await supabase.functions.invoke("tts-generate", {
-          body: { text: pendingInstance?.template?.message_text || "", language: elder.preferred_language },
+          body: { text, language: elder.preferred_language },
         });
-        if (error || !data?.audioContent) return;
+        if (error || !data?.audioContent) throw new Error("TTS API failed");
 
-        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+        const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
         audioRef.current = audio;
         try {
           await audio.play();
@@ -109,12 +127,13 @@ export default function ElderInterface() {
           setShowPlayButton(true);
         }
       } catch (err) {
-        console.error("Auto TTS error:", err);
+        console.error("ElevenLabs TTS failed, using browser TTS:", err);
+        speakText(text, elder.preferred_language);
       }
     };
 
     autoPlayTTS();
-  }, [hasPendingReminder, elder, ttsPlayed, activeView, pendingInstance]);
+  }, [hasPendingReminder, elder, ttsPlayed, activeView, pendingInstance, speakText]);
 
   const handleManualPlay = () => {
     if (audioRef.current) {
@@ -136,12 +155,17 @@ export default function ElderInterface() {
   }, []);
 
   const generateAndPlayTTS = useCallback(async (text: string, language: string) => {
-    const { data, error } = await supabase.functions.invoke("tts-generate", {
-      body: { text, language },
-    });
-    if (error || !data?.audioContent) throw new Error("TTS failed");
-    await playBase64Audio(data.audioContent);
-  }, [playBase64Audio]);
+    try {
+      const { data, error } = await supabase.functions.invoke("tts-generate", {
+        body: { text, language },
+      });
+      if (error || !data?.audioContent) throw new Error("TTS failed");
+      await playBase64Audio(data.audioContent);
+    } catch {
+      console.warn("ElevenLabs TTS failed, using browser TTS");
+      await speakText(text, language);
+    }
+  }, [playBase64Audio, speakText]);
 
   const transcribeAudio = useCallback(async (blob: Blob, language: string): Promise<string> => {
     const formData = new FormData();
