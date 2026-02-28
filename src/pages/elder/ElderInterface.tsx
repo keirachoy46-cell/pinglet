@@ -247,9 +247,11 @@ export default function ElderInterface() {
       setPendingInstance(null);
     } catch (err) {
       console.error("Reply processing error:", err);
-      toast.error("Something went wrong. Please try again.");
+      const msg = err instanceof Error && err.message.includes("Rate limit")
+        ? "Too many requests. Please wait a moment and try again."
+        : "Something went wrong. Please try again.";
+      toast.error(msg);
       setReplyStep("recording");
-      await recorder.startRecording();
     }
   }, [recorder, pendingInstance, elder, transcribeAudio]);
 
