@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Bell, Heart } from "lucide-react";
+import { Heart, PiggyBank } from "lucide-react";
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -45,7 +45,7 @@ export default function Login() {
         {/* Logo / Branding */}
         <div className="text-center space-y-3">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10">
-            <Bell className="h-8 w-8 text-primary" />
+            <PiggyBank className="h-8 w-8 text-destructive-foreground bg-destructive" />
           </div>
           <h1 className="text-3xl font-bold font-display tracking-tight">Pinglet</h1>
           <p className="text-muted-foreground flex items-center justify-center gap-1.5">
@@ -59,9 +59,9 @@ export default function Login() {
               {isSignUp ? "Create your account" : "Welcome back"}
             </CardTitle>
             <CardDescription>
-              {isSignUp
-                ? "Sign up to start caring for your loved ones"
-                : "Sign in to your family dashboard"}
+              {isSignUp ?
+              "Sign up to start caring for your loved ones" :
+              "Sign in to your family dashboard"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -74,8 +74,8 @@ export default function Login() {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+                  required />
+
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
@@ -86,8 +86,8 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
-                />
+                  minLength={6} />
+
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Please wait..." : isSignUp ? "Sign Up" : "Sign In"}
@@ -98,16 +98,16 @@ export default function Login() {
               <button
                 type="button"
                 className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                onClick={() => setIsSignUp(!isSignUp)}
-              >
-                {isSignUp
-                  ? "Already have an account? Sign in"
-                  : "Don't have an account? Sign up"}
+                onClick={() => setIsSignUp(!isSignUp)}>
+
+                {isSignUp ?
+                "Already have an account? Sign in" :
+                "Don't have an account? Sign up"}
               </button>
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    </div>);
+
 }
