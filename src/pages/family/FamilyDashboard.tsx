@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  Bell, Plus, UserPlus, Play, AlertTriangle,
-  LogOut, Clock, CheckCircle2, XCircle, HelpCircle, MessageSquare
-} from "lucide-react";
+  Plus, UserPlus, Play, AlertTriangle,
+  LogOut, Clock, CheckCircle2, XCircle, HelpCircle, MessageSquare, PiggyBank } from
+"lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import DailySummaryCard from "@/components/family/DailySummaryCard";
 import InsightsSection from "@/components/family/InsightsSection";
@@ -19,12 +19,12 @@ type ElderProfile = Tables<"elder_profiles">;
 type NotificationInstance = Tables<"notification_instances">;
 type NotificationTemplate = Tables<"notification_templates">;
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
+const STATUS_CONFIG: Record<string, {label: string;variant: "default" | "secondary" | "destructive" | "outline";icon: React.ReactNode;}> = {
   pending: { label: "Pending", variant: "outline", icon: <Clock className="h-3 w-3" /> },
   done: { label: "Done", variant: "default", icon: <CheckCircle2 className="h-3 w-3" /> },
   missed: { label: "Missed", variant: "destructive", icon: <XCircle className="h-3 w-3" /> },
   unclear: { label: "Unclear", variant: "secondary", icon: <HelpCircle className="h-3 w-3" /> },
-  no_response: { label: "No Response", variant: "secondary", icon: <AlertTriangle className="h-3 w-3" /> },
+  no_response: { label: "No Response", variant: "secondary", icon: <AlertTriangle className="h-3 w-3" /> }
 };
 
 export default function FamilyDashboard() {
@@ -34,7 +34,7 @@ export default function FamilyDashboard() {
   const [elders, setElders] = useState<ElderProfile[]>([]);
   const [selectedElderId, setSelectedElderId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
-  const [instances, setInstances] = useState<(NotificationInstance & { template?: NotificationTemplate })[]>([]);
+  const [instances, setInstances] = useState<(NotificationInstance & {template?: NotificationTemplate;})[]>([]);
   const [loading, setLoading] = useState(true);
 
   const selectedElder = elders.find((e) => e.id === selectedElderId);
@@ -43,17 +43,17 @@ export default function FamilyDashboard() {
   useEffect(() => {
     if (!user) return;
     const fetchElders = async () => {
-      const { data: links } = await supabase
-        .from("family_links")
-        .select("elder_profile_id")
-        .eq("family_user_id", user.id);
+      const { data: links } = await supabase.
+      from("family_links").
+      select("elder_profile_id").
+      eq("family_user_id", user.id);
 
       if (links && links.length > 0) {
         const elderIds = links.map((l) => l.elder_profile_id);
-        const { data: elderData } = await supabase
-          .from("elder_profiles")
-          .select("*")
-          .in("id", elderIds);
+        const { data: elderData } = await supabase.
+        from("elder_profiles").
+        select("*").
+        in("id", elderIds);
 
         if (elderData) {
           setElders(elderData);
@@ -72,21 +72,21 @@ export default function FamilyDashboard() {
     if (!selectedElderId) return;
     const fetchData = async () => {
       const [{ data: tplData }, { data: instData }] = await Promise.all([
-        supabase.from("notification_templates").select("*").eq("elder_profile_id", selectedElderId),
-        supabase
-          .from("notification_instances")
-          .select("*")
-          .eq("elder_profile_id", selectedElderId)
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
+      supabase.from("notification_templates").select("*").eq("elder_profile_id", selectedElderId),
+      supabase.
+      from("notification_instances").
+      select("*").
+      eq("elder_profile_id", selectedElderId).
+      order("created_at", { ascending: false }).
+      limit(10)]
+      );
 
       setTemplates(tplData || []);
 
       // Join template info
       const enriched = (instData || []).map((inst) => ({
         ...inst,
-        template: (tplData || []).find((t) => t.id === inst.template_id),
+        template: (tplData || []).find((t) => t.id === inst.template_id)
       }));
       setInstances(enriched);
     };
@@ -102,21 +102,21 @@ export default function FamilyDashboard() {
     const { error } = await supabase.from("notification_instances").insert({
       template_id: template.id,
       elder_profile_id: selectedElderId,
-      status: "pending",
+      status: "pending"
     });
-    if (error) toast.error("Failed: " + error.message);
-    else {
+    if (error) toast.error("Failed: " + error.message);else
+    {
       toast.success("Demo reminder triggered!");
       // Refresh instances
-      const { data } = await supabase
-        .from("notification_instances")
-        .select("*")
-        .eq("elder_profile_id", selectedElderId)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const { data } = await supabase.
+      from("notification_instances").
+      select("*").
+      eq("elder_profile_id", selectedElderId).
+      order("created_at", { ascending: false }).
+      limit(10);
       const enriched = (data || []).map((inst) => ({
         ...inst,
-        template: templates.find((t) => t.id === inst.template_id),
+        template: templates.find((t) => t.id === inst.template_id)
       }));
       setInstances(enriched);
     }
@@ -126,14 +126,14 @@ export default function FamilyDashboard() {
     if (!selectedElderId) return;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    const { data } = await supabase
-      .from("notification_instances")
-      .select("*, notification_templates!inner(category)")
-      .eq("elder_profile_id", selectedElderId)
-      .eq("notification_templates.category", "checkin")
-      .eq("status", "done")
-      .gte("created_at", today.toISOString());
+
+    const { data } = await supabase.
+    from("notification_instances").
+    select("*, notification_templates!inner(category)").
+    eq("elder_profile_id", selectedElderId).
+    eq("notification_templates.category", "checkin").
+    eq("status", "done").
+    gte("created_at", today.toISOString());
 
     if (!data || data.length === 0) {
       toast.warning(
@@ -149,8 +149,8 @@ export default function FamilyDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
+      </div>);
+
   }
 
   return (
@@ -160,7 +160,7 @@ export default function FamilyDashboard() {
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-1.5 rounded-lg bg-primary/10">
-              <Bell className="h-5 w-5 text-primary" />
+              <PiggyBank className="h-5 w-5 text-primary" />
             </div>
             <h1 className="font-display font-bold text-xl">Pinglet</h1>
           </div>
@@ -173,41 +173,41 @@ export default function FamilyDashboard() {
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Elder Selector */}
         <div className="flex items-center gap-3">
-          {elders.length > 0 ? (
-            <Select value={selectedElderId || ""} onValueChange={setSelectedElderId}>
+          {elders.length > 0 ?
+          <Select value={selectedElderId || ""} onValueChange={setSelectedElderId}>
               <SelectTrigger className="w-64">
                 <SelectValue placeholder="Select elder..." />
               </SelectTrigger>
               <SelectContent>
-                {elders.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
+                {elders.map((e) =>
+              <SelectItem key={e.id} value={e.id}>
                     {e.display_name} {e.relationship_label ? `(${e.relationship_label})` : ""}
                   </SelectItem>
-                ))}
+              )}
               </SelectContent>
-            </Select>
-          ) : (
-            <p className="text-muted-foreground text-sm">No elder profiles yet.</p>
-          )}
+            </Select> :
+
+          <p className="text-muted-foreground text-sm">No elder profiles yet.</p>
+          }
           <Button variant="outline" size="sm" onClick={() => navigate("/family/create-elder")} className="gap-2">
             <UserPlus className="h-4 w-4" /> Create Profile
           </Button>
-          {selectedElderId && (
-            <Button variant="default" size="sm" onClick={() => navigate(`/elder/${selectedElderId}`)} className="gap-2">
+          {selectedElderId &&
+          <Button variant="default" size="sm" onClick={() => navigate(`/elder/${selectedElderId}`)} className="gap-2">
               <Play className="h-4 w-4" /> Open Elder View
             </Button>
-          )}
+          }
         </div>
 
-        {selectedElderId && user && (
-          <>
+        {selectedElderId && user &&
+        <>
             {/* Daily Summary Card */}
             <DailySummaryCard
-              elderId={selectedElderId}
-              elderName={selectedElder?.display_name || ""}
-              relationshipLabel={selectedElder?.relationship_label}
-              userId={user.id}
-            />
+            elderId={selectedElderId}
+            elderName={selectedElder?.display_name || ""}
+            relationshipLabel={selectedElder?.relationship_label}
+            userId={user.id} />
+
 
             {/* Quick Actions */}
             <Card className="border-0 shadow-md">
@@ -217,11 +217,11 @@ export default function FamilyDashboard() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/family/create-notification?elderId=${selectedElderId}`)}
-                    className="gap-2"
-                  >
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/family/create-notification?elderId=${selectedElderId}`)}
+                  className="gap-2">
+
                     <Plus className="h-4 w-4" /> Create Notification
                   </Button>
                   <Button variant="outline" size="sm" onClick={triggerDemoReminder} className="gap-2">
@@ -250,16 +250,16 @@ export default function FamilyDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {instances.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
+                {instances.length === 0 ?
+              <p className="text-sm text-muted-foreground py-4 text-center">
                     No activity yet. Create a notification and trigger a demo reminder.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
+                  </p> :
+
+              <div className="space-y-3">
                     {instances.map((inst) => {
-                      const cfg = STATUS_CONFIG[inst.status] || STATUS_CONFIG.pending;
-                      return (
-                        <div key={inst.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  const cfg = STATUS_CONFIG[inst.status] || STATUS_CONFIG.pending;
+                  return (
+                    <div key={inst.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="text-lg">
                               {inst.template?.category === "task" ? "📋" : "💬"}
@@ -272,31 +272,31 @@ export default function FamilyDashboard() {
                                 {new Date(inst.created_at).toLocaleString()}
                               </p>
                               {/* Show transcript for check-ins */}
-                              {inst.template?.category === "checkin" && inst.reply_transcript && (
-                                <p className="text-xs mt-1 text-foreground/70 italic">"{inst.reply_transcript}"</p>
-                              )}
+                              {inst.template?.category === "checkin" && inst.reply_transcript &&
+                          <p className="text-xs mt-1 text-foreground/70 italic">"{inst.reply_transcript}"</p>
+                          }
                               {/* Show classification for unclear tasks */}
-                              {inst.template?.category === "task" && inst.classification_label === "unclear" && inst.reply_transcript && (
-                                <p className="text-xs mt-1 text-warning italic">"{inst.reply_transcript}"</p>
-                              )}
+                              {inst.template?.category === "task" && inst.classification_label === "unclear" && inst.reply_transcript &&
+                          <p className="text-xs mt-1 text-warning italic">"{inst.reply_transcript}"</p>
+                          }
                             </div>
                           </div>
                           <Badge variant={cfg.variant} className="gap-1 shrink-0">
                             {cfg.icon} {cfg.label}
                           </Badge>
-                        </div>
-                      );
-                    })}
+                        </div>);
+
+                })}
                   </div>
-                )}
+              }
               </CardContent>
             </Card>
 
             {/* Insights Section */}
             <InsightsSection elderId={selectedElderId} />
           </>
-        )}
+        }
       </main>
-    </div>
-  );
+    </div>);
+
 }
