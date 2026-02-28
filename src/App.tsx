@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import FamilyDashboard from "./pages/family/FamilyDashboard";
 import CreateElder from "./pages/family/CreateElder";
 import CreateNotification from "./pages/family/CreateNotification";
+import ElderInterface from "./pages/elder/ElderInterface";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,7 +27,7 @@ const App = () => (
             <Route path="/family" element={<ProtectedRoute><FamilyDashboard /></ProtectedRoute>} />
             <Route path="/family/create-elder" element={<ProtectedRoute><CreateElder /></ProtectedRoute>} />
             <Route path="/family/create-notification" element={<ProtectedRoute><CreateNotification /></ProtectedRoute>} />
-            {/* Elder route will be added in Phase 5 */}
+            <Route path="/elder/:elderProfileId" element={<ElderInterface />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
