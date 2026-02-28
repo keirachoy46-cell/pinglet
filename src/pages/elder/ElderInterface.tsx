@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Mic, MicOff, MessageCircle, Smile, Loader2, Volume2 } from "lucide-react";
+import { Mic, Square, MessageCircle, Smile, Loader2, Volume2, ArrowLeft } from "lucide-react";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -27,6 +27,7 @@ const MOOD_TAGS = ["Tired", "Lonely", "Happy", "Anxious", "Grateful", "Pain", "C
 
 export default function ElderInterface() {
   const { elderProfileId } = useParams<{ elderProfileId: string }>();
+  const navigate = useNavigate();
   const [elder, setElder] = useState<ElderProfile | null>(null);
   const [pendingInstance, setPendingInstance] = useState<(NotificationInstance & { template?: NotificationTemplate }) | null>(null);
   const [moodSettings, setMoodSettings] = useState<MoodSettings | null>(null);
@@ -34,12 +35,12 @@ export default function ElderInterface() {
   const [loading, setLoading] = useState(true);
 
   // Reply flow state
-  const [replyStep, setReplyStep] = useState<"listen" | "record" | "processing" | "done">("listen");
-  const [isPlayingTTS, setIsPlayingTTS] = useState(false);
+  const [replyStep, setReplyStep] = useState<"recording" | "processing" | "done">("recording");
 
   // Ask flow state
   const [askStep, setAskStep] = useState<"record" | "processing" | "answer">("record");
   const [answerText, setAnswerText] = useState("");
+  const [isPlayingTTS, setIsPlayingTTS] = useState(false);
 
   // Mood flow state
   const [moodStep, setMoodStep] = useState<"score" | "tags" | "voice" | "processing" | "ack">("score");
@@ -47,7 +48,6 @@ export default function ElderInterface() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [ackText, setAckText] = useState("");
 
-  // Processing states
   const [processingLabel, setProcessingLabel] = useState("");
 
   const recorder = useVoiceRecorder();
@@ -73,7 +73,6 @@ export default function ElderInterface() {
       if (moodData) setMoodSettings(moodData);
 
       if (instData && instData.length > 0) {
-        // Fetch template for the pending instance
         const { data: tpl } = await supabase
           .from("notification_templates")
           .select("*")
@@ -128,92 +127,55 @@ export default function ElderInterface() {
   const startReplyFlow = useCallback(async () => {
     if (!pendingInstance?.template || !elder) return;
     setActiveView("reply");
-    setReplyStep("listen");
+    setReplyStep("recording");
+    // Immediately start recording
+    await recorder.startRecording();
+  }, [pendingInstance, elder, recorder]);
+
+  const stopReplyRecording = useCallback(async () => {
+    const blob = await recorder.stopRecording();
+    if (!blob || !pendingInstance || !elder) return;
+
+    setReplyStep("processing");
+    setProcessingLabel("Transcribing your reply...");
 
     try {
-      // Play TTS of the notification message
+      const transcript = await transcribeAudio(blob, elder.preferred_language);
+      setProcessingLabel("Understanding your reply...");
+
       const tpl = pendingInstance.template;
-      if (tpl.voice_mode === "family_recorded" && tpl.family_voice_audio_url) {
-        // Play family recorded audio from storage
-        const { data: urlData } = supabase.storage.from("voice-recordings").getPublicUrl(tpl.family_voice_audio_url);
-        const audio = new Audio(urlData.publicUrl);
-        audioRef.current = audio;
-        setIsPlayingTTS(true);
-        await new Promise<void>((resolve) => {
-          audio.onended = () => { setIsPlayingTTS(false); resolve(); };
-          audio.play();
+      const isTask = tpl?.category === "task";
+
+      let classLabel = "done";
+      if (isTask) {
+        const { data: classData } = await supabase.functions.invoke("classify-reply", {
+          body: {
+            taskType: tpl?.type || "general",
+            messageText: tpl?.message_text || "",
+            transcript,
+          },
         });
-      } else {
-        await generateAndPlayTTS(tpl.message_text, elder.preferred_language);
+        classLabel = classData?.classification || "unclear";
       }
-      setReplyStep("record");
+
+      await supabase
+        .from("notification_instances")
+        .update({
+          status: classLabel,
+          reply_transcript: isTask && classLabel !== "unclear" ? null : transcript,
+          classification_label: isTask ? classLabel : null,
+        })
+        .eq("id", pendingInstance.id);
+
+      setReplyStep("done");
+      setPendingInstance(null);
     } catch (err) {
-      console.error("TTS playback error:", err);
-      setReplyStep("record");
-    }
-  }, [pendingInstance, elder, generateAndPlayTTS]);
-
-  const handleReplyRecord = useCallback(async () => {
-    if (recorder.isRecording) {
-      const blob = await recorder.stopRecording();
-      if (!blob || !pendingInstance || !elder) return;
-
-      setReplyStep("processing");
-      setProcessingLabel("Transcribing your reply...");
-
-      try {
-        const transcript = await transcribeAudio(blob, elder.preferred_language);
-        setProcessingLabel("Understanding your reply...");
-
-        const tpl = pendingInstance.template;
-        const isTask = tpl?.category === "task";
-
-        let classLabel = "done";
-        if (isTask) {
-          const { data: classData } = await supabase.functions.invoke("classify-reply", {
-            body: {
-              taskType: tpl?.type || "general",
-              messageText: tpl?.message_text || "",
-              transcript,
-            },
-          });
-          classLabel = classData?.classification || "unclear";
-        }
-
-        // Update notification instance
-        await supabase
-          .from("notification_instances")
-          .update({
-            status: classLabel,
-            reply_transcript: isTask && classLabel !== "unclear" ? null : transcript,
-            classification_label: isTask ? classLabel : null,
-          })
-          .eq("id", pendingInstance.id);
-
-        setReplyStep("done");
-
-        // Play thank you
-        try {
-          await generateAndPlayTTS(
-            elder.preferred_language === "Hindi" ? "धन्यवाद!" : "Thank you!",
-            elder.preferred_language
-          );
-        } catch { /* ignore TTS error for thank you */ }
-
-        // Refresh after delay
-        setTimeout(() => {
-          setActiveView("home");
-          setPendingInstance(null);
-        }, 3000);
-      } catch (err) {
-        console.error("Reply processing error:", err);
-        toast.error("Something went wrong. Please try again.");
-        setReplyStep("record");
-      }
-    } else {
+      console.error("Reply processing error:", err);
+      toast.error("Something went wrong. Please try again.");
+      setReplyStep("recording");
       await recorder.startRecording();
     }
-  }, [recorder, pendingInstance, elder, transcribeAudio, generateAndPlayTTS]);
+  }, [recorder, pendingInstance, elder, transcribeAudio]);
 
   // --- ASK A QUESTION FLOW ---
   const handleAskRecord = useCallback(async () => {
@@ -236,7 +198,6 @@ export default function ElderInterface() {
         setAnswerText(answer);
         setAskStep("answer");
 
-        // Save Q&A interaction
         await supabase.from("qa_interactions").insert({
           elder_profile_id: elder.id,
           question_transcript: transcript,
@@ -244,7 +205,6 @@ export default function ElderInterface() {
           language_used: elder.preferred_language,
         });
 
-        // Play answer via TTS
         try {
           await generateAndPlayTTS(answer, elder.preferred_language);
         } catch { /* ignore */ }
@@ -262,10 +222,6 @@ export default function ElderInterface() {
   const handleMoodScore = (score: number) => {
     setSelectedMoodScore(score);
     setMoodStep("tags");
-  };
-
-  const handleMoodTagsDone = () => {
-    setMoodStep("voice");
   };
 
   const processMoodEntry = useCallback(async (voiceBlob: Blob | null) => {
@@ -293,7 +249,6 @@ export default function ElderInterface() {
       const ack = ackData?.acknowledgement || "Thank you for sharing how you feel.";
       setAckText(ack);
 
-      // Save mood entry
       await supabase.from("mood_entries").insert({
         elder_profile_id: elder.id,
         mood_score: selectedMoodScore,
@@ -304,7 +259,6 @@ export default function ElderInterface() {
 
       setMoodStep("ack");
 
-      // Play acknowledgement
       try {
         await generateAndPlayTTS(ack, elder.preferred_language);
       } catch { /* ignore */ }
@@ -329,6 +283,7 @@ export default function ElderInterface() {
 
   const resetToHome = () => {
     setActiveView("home");
+    setReplyStep("recording");
     setAskStep("record");
     setMoodStep("score");
     setSelectedMoodScore(null);
@@ -354,13 +309,25 @@ export default function ElderInterface() {
     );
   }
 
+  const hasPendingReminder = !!pendingInstance;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="bg-primary text-primary-foreground px-6 py-8">
-        <h1 className="text-4xl md:text-5xl font-display font-bold">
-          Hi, {elder.display_name} 👋
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-4xl md:text-5xl font-display font-bold">
+            Hi, {elder.display_name} 👋
+          </h1>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+            onClick={() => navigate("/family")}
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" /> Dashboard
+          </Button>
+        </div>
         {activeView !== "home" && (
           <Button
             variant="ghost"
@@ -376,10 +343,10 @@ export default function ElderInterface() {
         {/* HOME VIEW */}
         {activeView === "home" && (
           <>
-            {/* Pending Reminder */}
-            {pendingInstance ? (
+            {hasPendingReminder ? (
+              /* Show the reminder with a big reply button */
               <Card className="border-2 border-primary/30 shadow-lg">
-                <CardContent className="p-6 md:p-8 space-y-5">
+                <CardContent className="p-6 md:p-8 space-y-6">
                   <div className="flex items-center gap-3">
                     <Volume2 className="h-7 w-7 text-primary shrink-0" />
                     <h2 className="text-2xl md:text-3xl font-display font-semibold text-foreground">
@@ -391,43 +358,47 @@ export default function ElderInterface() {
                   </p>
                   <Button
                     size="lg"
-                    className="w-full h-16 text-xl md:text-2xl font-display font-semibold gap-3"
+                    className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
                     onClick={startReplyFlow}
                   >
-                    <Mic className="h-6 w-6" /> Reply Now
+                    <Mic className="h-8 w-8" /> Reply
                   </Button>
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-0 shadow-md">
-                <CardContent className="p-6 md:p-8 text-center">
-                  <p className="text-2xl md:text-3xl text-muted-foreground font-display">
-                    No reminders right now ✨
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+              /* No pending reminders — show all done + secondary actions */
+              <div className="space-y-6">
+                <Card className="border-0 shadow-md">
+                  <CardContent className="p-6 md:p-8 text-center">
+                    <p className="text-2xl md:text-3xl text-muted-foreground font-display">
+                      No reminders right now ✨
+                    </p>
+                    <p className="text-lg text-muted-foreground mt-2">You're all caught up!</p>
+                  </CardContent>
+                </Card>
 
-            {/* Ask a Question Button */}
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full h-16 text-xl md:text-2xl font-display font-semibold gap-3 border-2"
-              onClick={() => { setActiveView("ask"); setAskStep("record"); recorder.reset(); }}
-            >
-              <MessageCircle className="h-6 w-6" /> Ask a Question
-            </Button>
+                {/* Ask a Question — only visible when no pending reminders */}
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full h-16 text-xl md:text-2xl font-display font-semibold gap-3 border-2"
+                  onClick={() => { setActiveView("ask"); setAskStep("record"); recorder.reset(); }}
+                >
+                  <MessageCircle className="h-6 w-6" /> Ask a Question
+                </Button>
 
-            {/* Mood Check-in Button */}
-            {moodSettings?.is_enabled && (
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full h-16 text-xl md:text-2xl font-display font-semibold gap-3 border-2 border-accent/50 text-accent hover:bg-accent hover:text-accent-foreground"
-                onClick={() => { setActiveView("mood"); setMoodStep("score"); setSelectedMoodScore(null); setSelectedTags([]); recorder.reset(); }}
-              >
-                <Smile className="h-6 w-6" /> How are you feeling?
-              </Button>
+                {/* Mood Check-in */}
+                {moodSettings?.is_enabled && (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full h-16 text-xl md:text-2xl font-display font-semibold gap-3 border-2"
+                    onClick={() => { setActiveView("mood"); setMoodStep("score"); setSelectedMoodScore(null); setSelectedTags([]); recorder.reset(); }}
+                  >
+                    <Smile className="h-6 w-6" /> How are you feeling?
+                  </Button>
+                )}
+              </div>
             )}
           </>
         )}
@@ -436,28 +407,23 @@ export default function ElderInterface() {
         {activeView === "reply" && (
           <Card className="border-0 shadow-lg">
             <CardContent className="p-6 md:p-8 space-y-6 text-center">
-              {replyStep === "listen" && (
+              {replyStep === "recording" && (
                 <>
-                  <Volume2 className="h-16 w-16 text-primary mx-auto animate-pulse-gentle" />
-                  <p className="text-2xl font-display text-foreground">
-                    {isPlayingTTS ? "Listening to your reminder..." : "Preparing audio..."}
+                  <div className="relative mx-auto w-40 h-40">
+                    <div className="absolute inset-0 rounded-full bg-destructive/20 animate-pulse" />
+                    <Mic className="h-16 w-16 text-destructive absolute inset-0 m-auto" />
+                  </div>
+                  <p className="text-2xl font-display text-foreground font-semibold">
+                    Recording your reply...
                   </p>
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-                </>
-              )}
-
-              {replyStep === "record" && (
-                <>
-                  <p className="text-2xl font-display text-foreground">
-                    {recorder.isRecording ? "Recording... Tap to stop" : "Tap to record your reply"}
-                  </p>
+                  <p className="text-lg text-muted-foreground">Press Stop when you're done</p>
                   <Button
                     size="lg"
-                    variant={recorder.isRecording ? "destructive" : "default"}
-                    className="w-32 h-32 rounded-full text-3xl mx-auto flex items-center justify-center"
-                    onClick={handleReplyRecord}
+                    variant="destructive"
+                    className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
+                    onClick={stopReplyRecording}
                   >
-                    {recorder.isRecording ? <MicOff className="h-12 w-12" /> : <Mic className="h-12 w-12" />}
+                    <Square className="h-8 w-8" /> Stop
                   </Button>
                 </>
               )}
@@ -470,10 +436,18 @@ export default function ElderInterface() {
               )}
 
               {replyStep === "done" && (
-                <>
-                  <div className="text-6xl">✅</div>
-                  <p className="text-3xl font-display text-foreground font-semibold">Thank you!</p>
-                </>
+                <div className="space-y-4">
+                  <div className="text-7xl">✅</div>
+                  <p className="text-3xl font-display text-foreground font-bold">Thank you!</p>
+                  <p className="text-lg text-muted-foreground">Your reply has been logged.</p>
+                  <Button
+                    size="lg"
+                    className="w-full h-14 text-xl font-display mt-4"
+                    onClick={resetToHome}
+                  >
+                    Done
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -494,7 +468,7 @@ export default function ElderInterface() {
                     className="w-32 h-32 rounded-full text-3xl mx-auto flex items-center justify-center"
                     onClick={handleAskRecord}
                   >
-                    {recorder.isRecording ? <MicOff className="h-12 w-12" /> : <Mic className="h-12 w-12" />}
+                    {recorder.isRecording ? <Square className="h-12 w-12" /> : <Mic className="h-12 w-12" />}
                   </Button>
                 </>
               )}
@@ -514,7 +488,7 @@ export default function ElderInterface() {
                   </p>
                   {isPlayingTTS && (
                     <div className="flex items-center justify-center gap-2 text-primary">
-                      <Volume2 className="h-5 w-5 animate-pulse-gentle" />
+                      <Volume2 className="h-5 w-5 animate-pulse" />
                       <span className="text-sm">Playing answer...</span>
                     </div>
                   )}
@@ -590,7 +564,7 @@ export default function ElderInterface() {
                   <Button
                     size="lg"
                     className="w-full h-14 text-xl font-display"
-                    onClick={handleMoodTagsDone}
+                    onClick={() => setMoodStep("voice")}
                   >
                     Continue
                   </Button>
@@ -608,7 +582,7 @@ export default function ElderInterface() {
                     className="w-28 h-28 rounded-full text-3xl mx-auto flex items-center justify-center"
                     onClick={() => handleMoodVoice(false)}
                   >
-                    {recorder.isRecording ? <MicOff className="h-10 w-10" /> : <Mic className="h-10 w-10" />}
+                    {recorder.isRecording ? <Square className="h-10 w-10" /> : <Mic className="h-10 w-10" />}
                   </Button>
                   <p className="text-base text-muted-foreground">
                     {recorder.isRecording ? "Tap to stop recording" : "Tap to record"}
@@ -641,7 +615,7 @@ export default function ElderInterface() {
                   </p>
                   {isPlayingTTS && (
                     <div className="flex items-center justify-center gap-2 text-primary">
-                      <Volume2 className="h-5 w-5 animate-pulse-gentle" />
+                      <Volume2 className="h-5 w-5 animate-pulse" />
                       <span className="text-sm">Playing message...</span>
                     </div>
                   )}
