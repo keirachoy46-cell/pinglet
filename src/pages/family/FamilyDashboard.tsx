@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   Plus, UserPlus, Play, AlertTriangle,
   LogOut, Clock, CheckCircle2, XCircle, HelpCircle, MessageSquare, PiggyBank,
-  Pencil, Trash2
+  Pencil, Trash2, Smile
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -20,11 +20,13 @@ import {
 import type { Tables } from "@/integrations/supabase/types";
 import DailySummaryCard from "@/components/family/DailySummaryCard";
 import InsightsSection from "@/components/family/InsightsSection";
-import MoodTrackingSettings from "@/components/family/MoodTrackingSettings";
 
 type ElderProfile = Tables<"elder_profiles">;
 type NotificationInstance = Tables<"notification_instances">;
 type NotificationTemplate = Tables<"notification_templates">;
+type MoodEntry = Tables<"mood_entries">;
+
+const MOOD_EMOJI: Record<number, string> = { 1: "😢", 2: "😟", 3: "😐", 4: "🙂", 5: "😊" };
 
 const STATUS_CONFIG: Record<string, {label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode;}> = {
   pending: { label: "Pending", variant: "outline", icon: <Clock className="h-3 w-3" /> },
@@ -43,6 +45,7 @@ export default function FamilyDashboard() {
   const [selectedElderId, setSelectedElderId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [instances, setInstances] = useState<(NotificationInstance & { template?: NotificationTemplate })[]>([]);
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const selectedElder = elders.find((e) => e.id === selectedElderId);
@@ -77,10 +80,16 @@ export default function FamilyDashboard() {
 
   const refreshData = async () => {
     if (!selectedElderId) return;
-    const [{ data: tplData }, { data: instData }] = await Promise.all([
+    const [{ data: tplData }, { data: instData }, { data: moodData }] = await Promise.all([
       supabase.from("notification_templates").select("*").eq("elder_profile_id", selectedElderId),
       supabase
         .from("notification_instances")
+        .select("*")
+        .eq("elder_profile_id", selectedElderId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("mood_entries")
         .select("*")
         .eq("elder_profile_id", selectedElderId)
         .order("created_at", { ascending: false })
@@ -88,6 +97,7 @@ export default function FamilyDashboard() {
     ]);
 
     setTemplates(tplData || []);
+    setMoodEntries(moodData || []);
     const enriched = (instData || []).map((inst) => ({
       ...inst,
       template: (tplData || []).find((t) => t.id === inst.template_id),
@@ -95,7 +105,6 @@ export default function FamilyDashboard() {
     setInstances(enriched);
   };
 
-  // Fetch templates + instances when elder changes
   useEffect(() => {
     if (!selectedElderId) return;
     refreshData();
@@ -138,6 +147,22 @@ export default function FamilyDashboard() {
     toast.success("Status entry deleted!");
     await refreshData();
   };
+
+  // Merge instances and mood entries into a unified timeline
+  const timelineItems = [
+    ...instances.map((inst) => ({
+      kind: "notification" as const,
+      id: inst.id,
+      created_at: inst.created_at,
+      inst,
+    })),
+    ...moodEntries.map((m) => ({
+      kind: "mood" as const,
+      id: m.id,
+      created_at: m.created_at,
+      mood: m,
+    })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   if (loading) {
     return (
@@ -288,7 +313,7 @@ export default function FamilyDashboard() {
               </CardContent>
             </Card>
 
-            {/* Live Status Panel */}
+            {/* Live Status Panel — unified timeline */}
             <Card className="border-0 shadow-md">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-display flex items-center gap-2">
@@ -296,13 +321,44 @@ export default function FamilyDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {instances.length === 0 ? (
+                {timelineItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
                     No activity yet. Trigger a reminder from the templates above.
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {instances.map((inst) => {
+                    {timelineItems.map((item) => {
+                      if (item.kind === "mood") {
+                        const m = item.mood;
+                        const emoji = MOOD_EMOJI[m.mood_score] || "😐";
+                        return (
+                          <div key={`mood-${m.id}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="text-lg">{emoji}</div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">Mood Check-in</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(m.created_at).toLocaleString()}
+                                </p>
+                                {m.selected_tags && m.selected_tags.length > 0 && (
+                                  <p className="text-xs mt-1 text-foreground/70">
+                                    {m.selected_tags.join(", ")}
+                                  </p>
+                                )}
+                                {m.mood_transcript && (
+                                  <p className="text-xs mt-1 text-foreground/70 italic">"{m.mood_transcript}"</p>
+                                )}
+                              </div>
+                            </div>
+                            <Badge variant="default" className="gap-1 shrink-0">
+                              <Smile className="h-3 w-3" /> {m.mood_score}/5
+                            </Badge>
+                          </div>
+                        );
+                      }
+
+                      // Notification instance
+                      const inst = item.inst;
                       const cfg = STATUS_CONFIG[inst.status] || STATUS_CONFIG.pending;
                       return (
                         <div key={inst.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
@@ -353,9 +409,6 @@ export default function FamilyDashboard() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Mood Tracking Settings */}
-            <MoodTrackingSettings elderId={selectedElderId} />
 
             {/* Insights Section */}
             <InsightsSection elderId={selectedElderId} />

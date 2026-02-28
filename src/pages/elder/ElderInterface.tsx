@@ -454,16 +454,40 @@ export default function ElderInterface() {
                 </CardContent>
               </Card>
             ) : (
-              /* No pending reminders — show all done + secondary actions */
+              /* No pending reminders — show mood question if enabled, then secondary actions */
               <div className="space-y-6">
-                <Card className="border-0 shadow-md">
-                  <CardContent className="p-6 md:p-8 text-center">
-                    <p className="text-2xl md:text-3xl text-muted-foreground font-display">
-                      No reminders right now ✨
-                    </p>
-                    <p className="text-lg text-muted-foreground mt-2">You're all caught up!</p>
-                  </CardContent>
-                </Card>
+                {/* Mood Check-in — shows as a question card like a reminder */}
+                {moodSettings?.is_enabled ? (
+                  <Card className="border-2 border-primary/30 shadow-lg">
+                    <CardContent className="p-6 md:p-8 space-y-6">
+                      <div className="flex items-center gap-3">
+                        <Smile className="h-7 w-7 text-primary shrink-0" />
+                        <h2 className="text-2xl md:text-3xl font-display font-semibold text-foreground">
+                          How are you feeling?
+                        </h2>
+                      </div>
+                      <p className="text-xl md:text-2xl text-foreground/80 leading-relaxed">
+                        Take a moment to share how you're doing today.
+                      </p>
+                      <Button
+                        size="lg"
+                        className="w-full h-20 text-2xl md:text-3xl font-display font-bold gap-3"
+                        onClick={() => { setActiveView("mood"); setMoodStep("score"); setSelectedMoodScore(null); setSelectedTags([]); recorder.reset(); }}
+                      >
+                        <Smile className="h-8 w-8" /> Share My Mood
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-0 shadow-md">
+                    <CardContent className="p-6 md:p-8 text-center">
+                      <p className="text-2xl md:text-3xl text-muted-foreground font-display">
+                        No reminders right now ✨
+                      </p>
+                      <p className="text-lg text-muted-foreground mt-2">You're all caught up!</p>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Ask a Question — only visible when no pending reminders */}
                 <Button
@@ -474,18 +498,6 @@ export default function ElderInterface() {
                 >
                   <MessageCircle className="h-6 w-6" /> Ask a Question
                 </Button>
-
-                {/* Mood Check-in */}
-                {moodSettings?.is_enabled && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full h-16 text-xl md:text-2xl font-display font-semibold gap-3 border-2"
-                    onClick={() => { setActiveView("mood"); setMoodStep("score"); setSelectedMoodScore(null); setSelectedTags([]); recorder.reset(); }}
-                  >
-                    <Smile className="h-6 w-6" /> How are you feeling?
-                  </Button>
-                )}
               </div>
             )}
           </>
