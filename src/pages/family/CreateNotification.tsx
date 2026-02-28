@@ -37,7 +37,7 @@ export default function CreateNotification() {
   const [loading, setLoading] = useState(false);
 
   // Step 1: Category
-  const [category, setCategory] = useState<"task" | "checkin">("task");
+  const [category, setCategory] = useState<"task" | "checkin" | "mood">("task");
 
   // Step 2: Type + Title
   const [type, setType] = useState("medication");
@@ -61,7 +61,8 @@ export default function CreateNotification() {
 
   useEffect(() => {
     if (category === "task") setType("medication");
-    else setType("how_are_you");
+    else if (category === "checkin") setType("how_are_you");
+    else setType("mood_checkin");
   }, [category]);
 
   const startRecording = async () => {
@@ -139,7 +140,11 @@ export default function CreateNotification() {
     setLoading(false);
   };
 
-  const types = category === "task" ? TASK_TYPES : CHECKIN_TYPES;
+  const MOOD_TYPES = [
+    { value: "mood_checkin", label: "😊 Mood Check-in" },
+  ];
+
+  const types = category === "task" ? TASK_TYPES : category === "checkin" ? CHECKIN_TYPES : MOOD_TYPES;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -173,7 +178,7 @@ export default function CreateNotification() {
           </CardHeader>
           <CardContent className="space-y-5">
             {step === 1 && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setCategory("task")}
@@ -199,6 +204,19 @@ export default function CreateNotification() {
                   <span className="text-2xl block mb-2">💬</span>
                   <span className="font-medium text-sm">Daily Check-in</span>
                   <p className="text-xs text-muted-foreground mt-1">How are you, sleep, custom</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategory("mood")}
+                  className={`p-6 rounded-xl border-2 text-center transition-all ${
+                    category === "mood"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/30"
+                  }`}
+                >
+                  <span className="text-2xl block mb-2">😊</span>
+                  <span className="font-medium text-sm">Mood Check-in</span>
+                  <p className="text-xs text-muted-foreground mt-1">Track daily mood & feelings</p>
                 </button>
               </div>
             )}
