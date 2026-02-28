@@ -14,13 +14,336 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      elder_profiles: {
+        Row: {
+          age: number | null
+          created_at: string
+          created_by_user_id: string
+          display_name: string
+          gender: string | null
+          id: string
+          preferred_language: string
+          relationship_label: string | null
+          timezone: string | null
+        }
+        Insert: {
+          age?: number | null
+          created_at?: string
+          created_by_user_id: string
+          display_name: string
+          gender?: string | null
+          id?: string
+          preferred_language?: string
+          relationship_label?: string | null
+          timezone?: string | null
+        }
+        Update: {
+          age?: number | null
+          created_at?: string
+          created_by_user_id?: string
+          display_name?: string
+          gender?: string | null
+          id?: string
+          preferred_language?: string
+          relationship_label?: string | null
+          timezone?: string | null
+        }
+        Relationships: []
+      }
+      family_dashboard_visits: {
+        Row: {
+          elder_profile_id: string
+          family_user_id: string
+          id: string
+          visited_at: string
+        }
+        Insert: {
+          elder_profile_id: string
+          family_user_id: string
+          id?: string
+          visited_at?: string
+        }
+        Update: {
+          elder_profile_id?: string
+          family_user_id?: string
+          id?: string
+          visited_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "family_dashboard_visits_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: false
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      family_links: {
+        Row: {
+          created_at: string
+          elder_profile_id: string
+          family_user_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          elder_profile_id: string
+          family_user_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          elder_profile_id?: string
+          family_user_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "family_links_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: false
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mood_entries: {
+        Row: {
+          acknowledgement_text: string | null
+          ai_suggested_tags: string[] | null
+          created_at: string
+          elder_profile_id: string
+          id: string
+          mood_audio_url: string | null
+          mood_score: number
+          mood_transcript: string | null
+          selected_tags: string[] | null
+        }
+        Insert: {
+          acknowledgement_text?: string | null
+          ai_suggested_tags?: string[] | null
+          created_at?: string
+          elder_profile_id: string
+          id?: string
+          mood_audio_url?: string | null
+          mood_score: number
+          mood_transcript?: string | null
+          selected_tags?: string[] | null
+        }
+        Update: {
+          acknowledgement_text?: string | null
+          ai_suggested_tags?: string[] | null
+          created_at?: string
+          elder_profile_id?: string
+          id?: string
+          mood_audio_url?: string | null
+          mood_score?: number
+          mood_transcript?: string | null
+          selected_tags?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mood_entries_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: false
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mood_settings: {
+        Row: {
+          elder_profile_id: string
+          frequency: string
+          id: string
+          is_enabled: boolean
+          time_1: string | null
+          time_2: string | null
+          updated_at: string
+        }
+        Insert: {
+          elder_profile_id: string
+          frequency?: string
+          id?: string
+          is_enabled?: boolean
+          time_1?: string | null
+          time_2?: string | null
+          updated_at?: string
+        }
+        Update: {
+          elder_profile_id?: string
+          frequency?: string
+          id?: string
+          is_enabled?: boolean
+          time_1?: string | null
+          time_2?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mood_settings_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: true
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_instances: {
+        Row: {
+          classification_label: string | null
+          created_at: string
+          elder_profile_id: string
+          id: string
+          reply_audio_url: string | null
+          reply_transcript: string | null
+          scheduled_at: string
+          status: string
+          template_id: string
+        }
+        Insert: {
+          classification_label?: string | null
+          created_at?: string
+          elder_profile_id: string
+          id?: string
+          reply_audio_url?: string | null
+          reply_transcript?: string | null
+          scheduled_at?: string
+          status?: string
+          template_id: string
+        }
+        Update: {
+          classification_label?: string | null
+          created_at?: string
+          elder_profile_id?: string
+          id?: string
+          reply_audio_url?: string | null
+          reply_transcript?: string | null
+          scheduled_at?: string
+          status?: string
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_instances_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: false
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "notification_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_templates: {
+        Row: {
+          category: string
+          created_at: string
+          elder_profile_id: string
+          family_voice_audio_url: string | null
+          frequency: string
+          id: string
+          is_enabled: boolean
+          message_text: string
+          schedule_time: string
+          title: string
+          type: string
+          voice_mode: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          elder_profile_id: string
+          family_voice_audio_url?: string | null
+          frequency?: string
+          id?: string
+          is_enabled?: boolean
+          message_text: string
+          schedule_time?: string
+          title: string
+          type: string
+          voice_mode?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          elder_profile_id?: string
+          family_voice_audio_url?: string | null
+          frequency?: string
+          id?: string
+          is_enabled?: boolean
+          message_text?: string
+          schedule_time?: string
+          title?: string
+          type?: string
+          voice_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_templates_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: false
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qa_interactions: {
+        Row: {
+          answer_audio_url: string | null
+          answer_text: string | null
+          asked_at: string
+          elder_profile_id: string
+          id: string
+          language_used: string | null
+          question_audio_url: string | null
+          question_transcript: string | null
+        }
+        Insert: {
+          answer_audio_url?: string | null
+          answer_text?: string | null
+          asked_at?: string
+          elder_profile_id: string
+          id?: string
+          language_used?: string | null
+          question_audio_url?: string | null
+          question_transcript?: string | null
+        }
+        Update: {
+          answer_audio_url?: string | null
+          answer_text?: string | null
+          asked_at?: string
+          elder_profile_id?: string
+          id?: string
+          language_used?: string | null
+          question_audio_url?: string | null
+          question_transcript?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qa_interactions_elder_profile_id_fkey"
+            columns: ["elder_profile_id"]
+            isOneToOne: false
+            referencedRelation: "elder_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_family_linked: {
+        Args: { p_elder_id: string; p_user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
