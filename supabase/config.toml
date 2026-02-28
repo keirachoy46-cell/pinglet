@@ -1,1 +1,16 @@
 project_id = "meaqpuuftpnyliflbxxi"
+
+[functions.transcribe]
+verify_jwt = false
+
+[functions.classify-reply]
+verify_jwt = false
+
+[functions.qa-answer]
+verify_jwt = false
+
+[functions.tts-generate]
+verify_jwt = false
+
+[functions.mood-ack]
+verify_jwt = false
