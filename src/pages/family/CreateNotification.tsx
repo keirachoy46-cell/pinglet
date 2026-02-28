@@ -99,6 +99,43 @@ export default function CreateNotification() {
     if (!user || !elderProfileId) return;
     setLoading(true);
 
+    // Mood category → save to mood_settings, not notification_templates
+    if (category === "mood") {
+      // Check if mood_settings already exists
+      const { data: existing } = await supabase
+        .from("mood_settings")
+        .select("id")
+        .eq("elder_profile_id", elderProfileId)
+        .single();
+
+      const moodFreq = frequency === "twice_daily" ? "twice_daily" : "once_daily";
+      const payload = {
+        elder_profile_id: elderProfileId,
+        is_enabled: true,
+        frequency: moodFreq,
+        time_1: scheduleTime,
+        time_2: frequency === "twice_daily" ? "20:00" : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existing) {
+        const { error } = await supabase
+          .from("mood_settings")
+          .update(payload)
+          .eq("id", existing.id);
+        if (error) { toast.error("Failed: " + error.message); }
+        else { toast.success("Mood tracking settings updated!"); navigate("/family"); }
+      } else {
+        const { error } = await supabase
+          .from("mood_settings")
+          .insert(payload);
+        if (error) { toast.error("Failed: " + error.message); }
+        else { toast.success("Mood tracking enabled!"); navigate("/family"); }
+      }
+      setLoading(false);
+      return;
+    }
+
     let familyVoiceAudioUrl: string | null = null;
 
     if (voiceMode === "family_recorded" && audioBlob) {
@@ -155,7 +192,7 @@ export default function CreateNotification() {
 
         {/* Progress */}
         <div className="flex gap-2">
-          {[1, 2, 3, 4, 5].map((s) => (
+          {(category === "mood" ? [1, 2] : [1, 2, 3, 4, 5]).map((s) => (
             <div
               key={s}
               className={`h-1.5 flex-1 rounded-full transition-colors ${
@@ -168,13 +205,14 @@ export default function CreateNotification() {
         <Card className="border-0 shadow-lg shadow-primary/5">
           <CardHeader>
             <CardTitle className="font-display">
-              {step === 1 && "What type of notification?"}
-              {step === 2 && "Details"}
-              {step === 3 && "Schedule"}
-              {step === 4 && "Voice Mode"}
-              {step === 5 && "Message"}
+              {category === "mood"
+                ? (step === 1 ? "What type of notification?" : "Mood Schedule")
+                : (step === 1 ? "What type of notification?" : step === 2 ? "Details" : step === 3 ? "Schedule" : step === 4 ? "Voice Mode" : "Message")
+              }
             </CardTitle>
-            <CardDescription>Step {step} of 5</CardDescription>
+            <CardDescription>
+              {category === "mood" ? `Step ${step} of 2` : `Step ${step} of 5`}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             {step === 1 && (
@@ -221,7 +259,7 @@ export default function CreateNotification() {
               </div>
             )}
 
-            {step === 2 && (
+            {step === 2 && category !== "mood" && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Type</Label>
@@ -241,7 +279,33 @@ export default function CreateNotification() {
               </div>
             )}
 
-            {step === 3 && (
+            {step === 2 && category === "mood" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Frequency</Label>
+                  <Select value={frequency} onValueChange={setFrequency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Once a day</SelectItem>
+                      <SelectItem value="twice_daily">Twice a day</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{frequency === "twice_daily" ? "Morning time" : "Check-in time"}</Label>
+                  <Input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">In the elder's local timezone</p>
+                </div>
+                {frequency === "twice_daily" && (
+                  <div className="space-y-2">
+                    <Label>Evening time</Label>
+                    <Input type="time" value="20:00" onChange={(e) => setScheduleTime(e.target.value)} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {step === 3 && category !== "mood" && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Time (elder's local time)</Label>
@@ -381,14 +445,26 @@ export default function CreateNotification() {
               >
                 Back
               </Button>
-              {step < 5 ? (
-                <Button onClick={() => setStep(step + 1)} className="gap-2">
-                  Next <ArrowRight className="h-4 w-4" />
-                </Button>
+              {category === "mood" ? (
+                step < 2 ? (
+                  <Button onClick={() => setStep(step + 1)} className="gap-2">
+                    Next <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button onClick={handleSubmit} disabled={loading} className="gap-2">
+                    {loading ? "Saving..." : <>Save <Check className="h-4 w-4" /></>}
+                  </Button>
+                )
               ) : (
-                <Button onClick={handleSubmit} disabled={loading || !messageText} className="gap-2">
-                  {loading ? "Creating..." : <>Create <Check className="h-4 w-4" /></>}
-                </Button>
+                step < 5 ? (
+                  <Button onClick={() => setStep(step + 1)} className="gap-2">
+                    Next <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button onClick={handleSubmit} disabled={loading || !messageText} className="gap-2">
+                    {loading ? "Creating..." : <>Create <Check className="h-4 w-4" /></>}
+                  </Button>
+                )
               )}
             </div>
           </CardContent>

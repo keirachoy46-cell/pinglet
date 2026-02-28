@@ -45,12 +45,14 @@ Tags they selected: ${tagsList}
 ${transcript ? `They also said: "${transcript}"` : ""}
 
 Generate a warm, empathetic acknowledgement in ${lang}. Follow these rules:
-- Write exactly 2 short, warm sentences acknowledging their feelings
-- Add a brief closing line (e.g., "Take care" or "I'm here for you")
+- Write exactly 1-2 short, warm sentences acknowledging their feelings
+- End with exactly this closing line: "Thank you for sharing. I've saved this to your log." (translated into ${lang})
 - Be genuinely caring, not clinical or formal
 - If mood is low (1-2), be extra gentle and comforting
 - If mood is good (4-5), share in their positivity
 - Never give medical advice
+- Do NOT ask follow-up questions
+- Do NOT encourage ongoing conversation
 - Keep it simple and heartfelt`;
 
     const response = await fetch(
