@@ -233,13 +233,6 @@ export default function FamilyDashboard() {
                   </Button>
                 </div>
 
-                {/* Elder link for demo */}
-                <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">Elder Interface Link (for demo):</p>
-                  <code className="text-xs text-primary break-all">
-                    {window.location.origin}/elder/{selectedElderId}
-                  </code>
-                </div>
               </CardContent>
             </Card>
 
