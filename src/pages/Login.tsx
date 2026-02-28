@@ -45,7 +45,7 @@ export default function Login() {
         {/* Logo / Branding */}
         <div className="text-center space-y-3">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-100">
-            <PiggyBank className="h-8 w-8 text-red-400 bg-red-100" />
+            <PiggyBank className="h-8 w-8 bg-red-100 text-red-500" />
           </div>
           <h1 className="text-3xl font-bold font-display tracking-tight">Pinglet</h1>
           <p className="text-muted-foreground flex items-center justify-center gap-1.5">
