@@ -126,27 +126,15 @@ export default function FamilyDashboard() {
     await refreshData();
   };
 
-  const runDailyCheck = async () => {
-    if (!selectedElderId) return;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const { data } = await supabase
+  const deleteInstance = async (instanceId: string) => {
+    const { error } = await supabase
       .from("notification_instances")
-      .select("*, notification_templates!inner(category)")
-      .eq("elder_profile_id", selectedElderId)
-      .eq("notification_templates.category", "checkin")
-      .eq("status", "done")
-      .gte("created_at", today.toISOString());
+      .delete()
+      .eq("id", instanceId);
 
-    if (!data || data.length === 0) {
-      toast.warning(
-        `${selectedElder?.display_name || "Elder"} hasn't checked in today.`,
-        { duration: 8000 }
-      );
-    } else {
-      toast.success(`${selectedElder?.display_name} has ${data.length} check-in(s) today.`);
-    }
+    if (error) { toast.error("Failed to delete: " + error.message); return; }
+    toast.success("Status entry deleted!");
+    await refreshData();
   };
 
   if (loading) {
@@ -176,7 +164,7 @@ export default function FamilyDashboard() {
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Elder Selector */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {elders.length > 0 ? (
             <Select value={selectedElderId || ""} onValueChange={setSelectedElderId}>
               <SelectTrigger className="w-64">
@@ -197,9 +185,14 @@ export default function FamilyDashboard() {
             <UserPlus className="h-4 w-4" /> Create Profile
           </Button>
           {selectedElderId && (
-            <Button variant="default" size="sm" onClick={() => navigate(`/elder/${selectedElderId}`)} className="gap-2">
-              <Play className="h-4 w-4" /> Open Elder View
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={() => navigate(`/family/edit-elder/${selectedElderId}`)} className="gap-2">
+                <Pencil className="h-4 w-4" /> Edit Profile
+              </Button>
+              <Button variant="default" size="sm" onClick={() => navigate(`/elder/${selectedElderId}`)} className="gap-2">
+                <Play className="h-4 w-4" /> Open Elder View
+              </Button>
+            </>
           )}
         </div>
 
@@ -213,14 +206,27 @@ export default function FamilyDashboard() {
               userId={user.id}
             />
 
-
             {/* Notification Templates */}
-            {templates.length > 0 && (
-              <Card className="border-0 shadow-md">
-                <CardHeader className="pb-3">
+            <Card className="border-0 shadow-md">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-display">Notification Templates</CardTitle>
-                </CardHeader>
-                <CardContent>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/family/create-notification?elderId=${selectedElderId}`)}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" /> Add New
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {templates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No notifications yet. Click "Add New" to create one.
+                  </p>
+                ) : (
                   <div className="space-y-3">
                     {templates.map((tpl) => (
                       <div key={tpl.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
@@ -236,6 +242,15 @@ export default function FamilyDashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => triggerReminder(tpl.id)}
+                            title="Trigger this reminder now"
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -267,9 +282,9 @@ export default function FamilyDashboard() {
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
 
             {/* Live Status Panel */}
             <Card className="border-0 shadow-md">
@@ -281,7 +296,7 @@ export default function FamilyDashboard() {
               <CardContent>
                 {instances.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
-                    No activity yet. Create a notification and trigger a demo reminder.
+                    No activity yet. Trigger a reminder from the templates above.
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -300,10 +315,7 @@ export default function FamilyDashboard() {
                               <p className="text-xs text-muted-foreground">
                                 {new Date(inst.created_at).toLocaleString()}
                               </p>
-                              {inst.template?.category === "checkin" && inst.reply_transcript && (
-                                <p className="text-xs mt-1 text-foreground/70 italic">"{inst.reply_transcript}"</p>
-                              )}
-                              {inst.template?.category === "task" && inst.classification_label === "unclear" && inst.reply_transcript && (
+                              {inst.reply_transcript && (
                                 <p className="text-xs mt-1 text-foreground/70 italic">"{inst.reply_transcript}"</p>
                               )}
                             </div>
@@ -323,6 +335,25 @@ export default function FamilyDashboard() {
                             <Badge variant={cfg.variant} className="gap-1">
                               {cfg.icon} {cfg.label}
                             </Badge>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete this status entry?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will remove this entry from the live status.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteInstance(inst.id)}>Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
                       );
