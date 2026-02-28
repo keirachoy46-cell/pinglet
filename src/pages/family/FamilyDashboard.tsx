@@ -93,33 +93,33 @@ export default function FamilyDashboard() {
     fetchData();
   }, [selectedElderId]);
 
-  const triggerDemoReminder = async () => {
+  const triggerDemoReminder = async (templateId?: string) => {
     if (!selectedElderId || templates.length === 0) {
       toast.error("Create a notification template first!");
       return;
     }
-    const template = templates[0];
+    const template = templateId ? templates.find(t => t.id === templateId) : templates[0];
+    if (!template) { toast.error("Template not found"); return; }
+    
     const { error } = await supabase.from("notification_instances").insert({
       template_id: template.id,
       elder_profile_id: selectedElderId,
       status: "pending"
     });
-    if (error) toast.error("Failed: " + error.message);else
-    {
-      toast.success("Demo reminder triggered!");
-      // Refresh instances
-      const { data } = await supabase.
-      from("notification_instances").
-      select("*").
-      eq("elder_profile_id", selectedElderId).
-      order("created_at", { ascending: false }).
-      limit(10);
-      const enriched = (data || []).map((inst) => ({
-        ...inst,
-        template: templates.find((t) => t.id === inst.template_id)
-      }));
-      setInstances(enriched);
-    }
+    if (error) { toast.error("Failed: " + error.message); return; }
+    
+    toast.success(`Reminder "${template.title}" triggered!`);
+    const { data } = await supabase
+      .from("notification_instances")
+      .select("*")
+      .eq("elder_profile_id", selectedElderId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    const enriched = (data || []).map((inst) => ({
+      ...inst,
+      template: templates.find((t) => t.id === inst.template_id)
+    }));
+    setInstances(enriched);
   };
 
   const runDailyCheck = async () => {
@@ -224,9 +224,17 @@ export default function FamilyDashboard() {
 
                     <Plus className="h-4 w-4" /> Create Notification
                   </Button>
-                  <Button variant="outline" size="sm" onClick={triggerDemoReminder} className="gap-2">
-                    <Play className="h-4 w-4" /> Trigger Demo Reminder
-                  </Button>
+                  {templates.length > 0 ? (
+                    templates.map((tpl) => (
+                      <Button key={tpl.id} variant="outline" size="sm" onClick={() => triggerDemoReminder(tpl.id)} className="gap-2">
+                        <Play className="h-4 w-4" /> Trigger "{tpl.title}"
+                      </Button>
+                    ))
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => triggerDemoReminder()} className="gap-2" disabled>
+                      <Play className="h-4 w-4" /> Trigger Reminder
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={runDailyCheck} className="gap-2">
                     <AlertTriangle className="h-4 w-4" /> Run Daily Check
                   </Button>

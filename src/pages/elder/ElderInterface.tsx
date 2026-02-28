@@ -103,16 +103,31 @@ export default function ElderInterface() {
     });
   }, []);
 
-  // Auto-play TTS of reminder message when elder view loads
+  // Auto-play voice when elder view loads - family recording or TTS
   useEffect(() => {
     if (!hasPendingReminder || !elder || ttsPlayed || activeView !== "home") return;
     setTtsPlayed(true);
 
-    const text = pendingInstance?.template?.message_text || "";
-    if (!text) return;
+    const template = pendingInstance?.template;
+    if (!template) return;
 
-    // Try ElevenLabs first, fall back to browser TTS
-    const autoPlayTTS = async () => {
+    const autoPlay = async () => {
+      // Priority 1: Family recorded voice
+      if (template.voice_mode === "family_recorded" && template.family_voice_audio_url) {
+        const audio = new Audio(template.family_voice_audio_url);
+        audioRef.current = audio;
+        try {
+          await audio.play();
+        } catch {
+          setShowPlayButton(true);
+        }
+        return;
+      }
+
+      // Priority 2: TTS (ElevenLabs → browser fallback)
+      const text = template.message_text || "";
+      if (!text) return;
+
       try {
         const { data, error } = await supabase.functions.invoke("tts-generate", {
           body: { text, language: elder.preferred_language },
@@ -132,7 +147,7 @@ export default function ElderInterface() {
       }
     };
 
-    autoPlayTTS();
+    autoPlay();
   }, [hasPendingReminder, elder, ttsPlayed, activeView, pendingInstance, speakText]);
 
   const handleManualPlay = () => {
