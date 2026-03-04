@@ -41,6 +41,19 @@ const languageMap: Record<string, string> = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function parseOpenAIError(errorText: string): { type?: string; code?: string; message?: string } {
+  try {
+    const parsed = JSON.parse(errorText);
+    return {
+      type: parsed?.error?.type,
+      code: parsed?.error?.code,
+      message: parsed?.error?.message,
+    };
+  } catch {
+    return {};
+  }
+}
+
 function normalizeLanguageCode(languageHint: string | null): string | null {
   if (!languageHint) return null;
   const normalized = languageHint.trim().toLowerCase();
@@ -84,8 +97,8 @@ serve(async (req) => {
 
     const languageCode = normalizeLanguageCode(languageHint);
 
-    const maxRetries = 4;
-    let delayMs = 1500;
+    const maxRetries = 3;
+    let delayMs = 2000;
     let finalResponse: Response | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -98,7 +111,24 @@ serve(async (req) => {
       });
 
       if (finalResponse.status !== 429) break;
-      if (attempt === maxRetries) break;
+
+      const rateLimitText = await finalResponse.text();
+      const parsedRateError = parseOpenAIError(rateLimitText);
+      const isQuotaError = parsedRateError.type === "insufficient_quota" || parsedRateError.code === "insufficient_quota";
+
+      if (isQuotaError) {
+        return new Response(
+          JSON.stringify({ error: "OpenAI quota exceeded. Please update billing or use a different key." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (attempt === maxRetries) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded, please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
 
       const retryAfter = Number(finalResponse.headers.get("retry-after"));
       const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
@@ -114,17 +144,11 @@ serve(async (req) => {
     }
 
     if (!finalResponse.ok) {
-      if (finalResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Whisper is temporarily busy. Please wait 20-30 seconds and try again." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
       const errorText = await finalResponse.text();
+      const parsedError = parseOpenAIError(errorText);
       console.error("Whisper API error:", finalResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: "Transcription failed", details: errorText }),
+        JSON.stringify({ error: parsedError.message || "Transcription failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

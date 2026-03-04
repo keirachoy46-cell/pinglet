@@ -183,33 +183,42 @@ export default function ElderInterface() {
   }, [playBase64Audio, speakText]);
 
   const transcribeAudio = useCallback(async (blob: Blob, language: string): Promise<string> => {
-    const maxRetries = 3;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
-      formData.append("language", language);
+    const formData = new FormData();
+    formData.append("audio", blob, "recording.webm");
+    formData.append("language", language);
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
-        {
-          method: "POST",
-          headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-          body: formData,
-        }
-      );
-
-      if (response.status === 429 && attempt < maxRetries - 1) {
-        const waitMs = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
-        toast.info(`Transcription busy, retrying in ${waitMs / 1000}s...`);
-        await new Promise((r) => setTimeout(r, waitMs));
-        continue;
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
+      {
+        method: "POST",
+        headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        body: formData,
       }
+    );
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Transcription failed");
-      return result.transcript;
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 402) {
+        throw new Error(result.error || "OpenAI quota exceeded.");
+      }
+      if (response.status === 429) {
+        throw new Error(result.error || "Rate limit exceeded, please try again later.");
+      }
+      throw new Error(result.error || "Transcription failed");
     }
-    throw new Error("Transcription failed after multiple retries. Please try again in a moment.");
+
+    return typeof result?.transcript === "string" ? result.transcript : "";
+  }, []);
+
+  const getVoiceErrorMessage = useCallback((err: unknown) => {
+    const msg = err instanceof Error ? err.message.toLowerCase() : "";
+    if (msg.includes("quota") || msg.includes("billing") || msg.includes("402")) {
+      return "Transcription credits are exhausted. Please update your OpenAI billing.";
+    }
+    if (msg.includes("rate limit") || msg.includes("busy") || msg.includes("429")) {
+      return "Transcription is busy right now. Please wait a little and try again.";
+    }
+    return "Something went wrong. Please try again.";
   }, []);
 
   // --- REPLY FLOW ---
@@ -260,13 +269,10 @@ export default function ElderInterface() {
       setPendingInstance(null);
     } catch (err) {
       console.error("Reply processing error:", err);
-      const msg = err instanceof Error && err.message.includes("Rate limit")
-        ? "Too many requests. Please wait a moment and try again."
-        : "Something went wrong. Please try again.";
-      toast.error(msg);
+      toast.error(getVoiceErrorMessage(err));
       setReplyStep("recording");
     }
-  }, [recorder, pendingInstance, elder, transcribeAudio]);
+  }, [recorder, pendingInstance, elder, transcribeAudio, getVoiceErrorMessage]);
 
   // --- ASK A QUESTION FLOW ---
   const handleAskRecord = useCallback(async () => {
@@ -301,16 +307,13 @@ export default function ElderInterface() {
         } catch { /* ignore */ }
       } catch (err) {
         console.error("Q&A error:", err);
-        const msg = err instanceof Error && err.message.includes("Rate limit")
-          ? "Transcription is busy right now. Please wait a little and try again."
-          : "Something went wrong. Please try again.";
-        toast.error(msg);
+        toast.error(getVoiceErrorMessage(err));
         setAskStep("record");
       }
     } else {
       await recorder.startRecording();
     }
-  }, [recorder, elder, transcribeAudio, generateAndPlayTTS]);
+  }, [recorder, elder, transcribeAudio, generateAndPlayTTS, getVoiceErrorMessage]);
 
   // --- MOOD FLOW ---
   const handleMoodScore = (score: number) => {
@@ -358,13 +361,10 @@ export default function ElderInterface() {
       } catch { /* ignore */ }
     } catch (err) {
       console.error("Mood entry error:", err);
-      const msg = err instanceof Error && err.message.includes("Rate limit")
-        ? "Transcription is busy right now. Please wait a little and try again."
-        : "Something went wrong.";
-      toast.error(msg);
+      toast.error(getVoiceErrorMessage(err));
       setMoodStep("score");
     }
-  }, [elder, selectedMoodScore, selectedTags, transcribeAudio, generateAndPlayTTS]);
+  }, [elder, selectedMoodScore, selectedTags, transcribeAudio, generateAndPlayTTS, getVoiceErrorMessage]);
 
   const handleMoodVoice = useCallback(async (skipVoice: boolean) => {
     if (!skipVoice && recorder.isRecording) {
