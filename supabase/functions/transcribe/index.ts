@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,51 +23,39 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
-    const arrayBuffer = await audioFile.arrayBuffer();
-    const base64Audio = base64Encode(arrayBuffer);
+    // Build form data for OpenAI Whisper API
+    const whisperForm = new FormData();
+    whisperForm.append("file", audioFile, audioFile.name || "audio.webm");
+    whisperForm.append("model", "whisper-1");
+    
+    if (languageHint) {
+      // Map language names to ISO 639-1 codes for Whisper
+      const langMap: Record<string, string> = {
+        english: "en", spanish: "es", french: "fr", german: "de",
+        italian: "it", portuguese: "pt", dutch: "nl", russian: "ru",
+        chinese: "zh", japanese: "ja", korean: "ko", arabic: "ar",
+        hindi: "hi", turkish: "tr", polish: "pl", swedish: "sv",
+        danish: "da", norwegian: "no", finnish: "fi", greek: "el",
+        hebrew: "he", thai: "th", vietnamese: "vi", indonesian: "id",
+        malay: "ms", tagalog: "tl", czech: "cs", romanian: "ro",
+        hungarian: "hu", ukrainian: "uk",
+      };
+      const code = langMap[languageHint.toLowerCase()] || languageHint.substring(0, 2).toLowerCase();
+      whisperForm.append("language", code);
+    }
 
-    const mimeType = audioFile.type || "audio/webm";
-
-    const languageInstruction = languageHint
-      ? `The audio is likely in ${languageHint}. `
-      : "";
-
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "system",
-              content: `You are a speech-to-text transcription assistant. ${languageInstruction}Transcribe the audio exactly as spoken. Output ONLY the transcribed text, nothing else. If the audio is silent or unintelligible, output an empty string.`,
-            },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: base64Audio,
-                    format: mimeType.includes("wav") ? "wav" : mimeType.includes("mp3") ? "mp3" : "wav",
-                  },
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    );
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: whisperForm,
+    });
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -77,14 +64,8 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted, please add funds." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("Whisper API error:", response.status, errorText);
       return new Response(
         JSON.stringify({ error: "Transcription failed", details: errorText }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -92,7 +73,7 @@ serve(async (req) => {
     }
 
     const result = await response.json();
-    const transcript = result.choices?.[0]?.message?.content?.trim() || "";
+    const transcript = result.text?.trim() || "";
 
     return new Response(JSON.stringify({ transcript }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
