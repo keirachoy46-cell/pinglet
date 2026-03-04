@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,6 +74,60 @@ function buildWhisperForm(audioFile: File, languageCode: string | null) {
   return form;
 }
 
+async function transcribeWithLovableFallback(audioFile: File, languageHint: string | null): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("Fallback unavailable: LOVABLE_API_KEY is not configured");
+  }
+
+  const arrayBuffer = await audioFile.arrayBuffer();
+  const base64Audio = base64Encode(arrayBuffer);
+  const mimeType = audioFile.type || "audio/webm";
+
+  const languageInstruction = languageHint
+    ? `The audio is likely in ${languageHint}. `
+    : "";
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You are a speech-to-text transcription assistant. ${languageInstruction}Transcribe the audio exactly as spoken. Output ONLY the transcribed text, nothing else. If the audio is silent or unintelligible, output an empty string.`,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: {
+                data: base64Audio,
+                format: mimeType.includes("wav") ? "wav" : mimeType.includes("mp3") ? "mp3" : "wav",
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Fallback transcription failed (${response.status}): ${errorText}`);
+  }
+
+  const result = await response.json();
+  return typeof result?.choices?.[0]?.message?.content === "string"
+    ? result.choices[0].message.content.trim()
+    : "";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -92,17 +147,19 @@ serve(async (req) => {
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured");
+      const transcript = await transcribeWithLovableFallback(audioFile, languageHint);
+      return new Response(JSON.stringify({ transcript, provider: "lovable_fallback" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const languageCode = normalizeLanguageCode(languageHint);
 
     const maxRetries = 3;
     let delayMs = 2000;
-    let finalResponse: Response | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      finalResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      const openAIResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${OPENAI_API_KEY}`,
@@ -110,55 +167,62 @@ serve(async (req) => {
         body: buildWhisperForm(audioFile, languageCode),
       });
 
-      if (finalResponse.status !== 429) break;
+      if (openAIResponse.ok) {
+        const result = await openAIResponse.json();
+        const transcript = typeof result?.text === "string" ? result.text.trim() : "";
 
-      const rateLimitText = await finalResponse.text();
-      const parsedRateError = parseOpenAIError(rateLimitText);
-      const isQuotaError = parsedRateError.type === "insufficient_quota" || parsedRateError.code === "insufficient_quota";
-
-      if (isQuotaError) {
-        return new Response(
-          JSON.stringify({ error: "OpenAI quota exceeded. Please update billing or use a different key." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        return new Response(JSON.stringify({ transcript, provider: "openai_whisper" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      if (attempt === maxRetries) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded, please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+      if (openAIResponse.status === 429) {
+        const rateLimitText = await openAIResponse.text();
+        const parsedRateError = parseOpenAIError(rateLimitText);
+        const isQuotaError = parsedRateError.type === "insufficient_quota" || parsedRateError.code === "insufficient_quota";
+
+        if (isQuotaError || attempt === maxRetries) {
+          try {
+            const transcript = await transcribeWithLovableFallback(audioFile, languageHint);
+            return new Response(JSON.stringify({ transcript, provider: "lovable_fallback" }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          } catch (fallbackErr) {
+            return new Response(
+              JSON.stringify({
+                error: isQuotaError
+                  ? "OpenAI quota exceeded and fallback transcription is unavailable."
+                  : "Rate limit exceeded and fallback transcription is unavailable.",
+                details: fallbackErr instanceof Error ? fallbackErr.message : "Unknown fallback error",
+              }),
+              { status: isQuotaError ? 402 : 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        }
+
+        const retryAfter = Number(openAIResponse.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : delayMs;
+
+        await sleep(waitMs);
+        delayMs = Math.min(delayMs * 2, 15000);
+        continue;
       }
 
-      const retryAfter = Number(finalResponse.headers.get("retry-after"));
-      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
-        : delayMs;
-
-      await sleep(waitMs);
-      delayMs = Math.min(delayMs * 2, 15000);
-    }
-
-    if (!finalResponse) {
-      throw new Error("Transcription request did not complete");
-    }
-
-    if (!finalResponse.ok) {
-      const errorText = await finalResponse.text();
+      const errorText = await openAIResponse.text();
       const parsedError = parseOpenAIError(errorText);
-      console.error("Whisper API error:", finalResponse.status, errorText);
+      console.error("Whisper API error:", openAIResponse.status, errorText);
       return new Response(
         JSON.stringify({ error: parsedError.message || "Transcription failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const result = await finalResponse.json();
-    const transcript = typeof result?.text === "string" ? result.text.trim() : "";
-
-    return new Response(JSON.stringify({ transcript }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: "Transcription failed after retries." }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (e) {
     console.error("transcribe error:", e);
     return new Response(
