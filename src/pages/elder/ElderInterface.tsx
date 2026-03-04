@@ -183,21 +183,33 @@ export default function ElderInterface() {
   }, [playBase64Audio, speakText]);
 
   const transcribeAudio = useCallback(async (blob: Blob, language: string): Promise<string> => {
-    const formData = new FormData();
-    formData.append("audio", blob, "recording.webm");
-    formData.append("language", language);
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+      formData.append("language", language);
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
-      {
-        method: "POST",
-        headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-        body: formData,
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
+        {
+          method: "POST",
+          headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: formData,
+        }
+      );
+
+      if (response.status === 429 && attempt < maxRetries - 1) {
+        const waitMs = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
+        toast.info(`Transcription busy, retrying in ${waitMs / 1000}s...`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
       }
-    );
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Transcription failed");
-    return result.transcript;
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Transcription failed");
+      return result.transcript;
+    }
+    throw new Error("Transcription failed after multiple retries. Please try again in a moment.");
   }, []);
 
   // --- REPLY FLOW ---
