@@ -6,6 +6,60 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const languageMap: Record<string, string> = {
+  english: "en",
+  spanish: "es",
+  french: "fr",
+  german: "de",
+  italian: "it",
+  portuguese: "pt",
+  dutch: "nl",
+  russian: "ru",
+  chinese: "zh",
+  japanese: "ja",
+  korean: "ko",
+  arabic: "ar",
+  hindi: "hi",
+  turkish: "tr",
+  polish: "pl",
+  swedish: "sv",
+  danish: "da",
+  norwegian: "no",
+  finnish: "fi",
+  greek: "el",
+  hebrew: "he",
+  thai: "th",
+  vietnamese: "vi",
+  indonesian: "id",
+  malay: "ms",
+  tagalog: "tl",
+  czech: "cs",
+  romanian: "ro",
+  hungarian: "hu",
+  ukrainian: "uk",
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function normalizeLanguageCode(languageHint: string | null): string | null {
+  if (!languageHint) return null;
+  const normalized = languageHint.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (normalized.length === 2) return normalized;
+  return languageMap[normalized] || normalized.slice(0, 2);
+}
+
+function buildWhisperForm(audioFile: File, languageCode: string | null) {
+  const form = new FormData();
+  form.append("file", audioFile, audioFile.name || "recording.webm");
+  form.append("model", "whisper-1");
+  if (languageCode) {
+    form.append("language", languageCode);
+  }
+  return form;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -13,7 +67,7 @@ serve(async (req) => {
 
   try {
     const formData = await req.formData();
-    const audioFile = formData.get("audio") as File;
+    const audioFile = formData.get("audio") as File | null;
     const languageHint = formData.get("language") as string | null;
 
     if (!audioFile) {
@@ -28,52 +82,55 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is not configured");
     }
 
-    // Build form data for OpenAI Whisper API
-    const whisperForm = new FormData();
-    whisperForm.append("file", audioFile, audioFile.name || "audio.webm");
-    whisperForm.append("model", "whisper-1");
-    
-    if (languageHint) {
-      // Map language names to ISO 639-1 codes for Whisper
-      const langMap: Record<string, string> = {
-        english: "en", spanish: "es", french: "fr", german: "de",
-        italian: "it", portuguese: "pt", dutch: "nl", russian: "ru",
-        chinese: "zh", japanese: "ja", korean: "ko", arabic: "ar",
-        hindi: "hi", turkish: "tr", polish: "pl", swedish: "sv",
-        danish: "da", norwegian: "no", finnish: "fi", greek: "el",
-        hebrew: "he", thai: "th", vietnamese: "vi", indonesian: "id",
-        malay: "ms", tagalog: "tl", czech: "cs", romanian: "ro",
-        hungarian: "hu", ukrainian: "uk",
-      };
-      const code = langMap[languageHint.toLowerCase()] || languageHint.substring(0, 2).toLowerCase();
-      whisperForm.append("language", code);
+    const languageCode = normalizeLanguageCode(languageHint);
+
+    const maxRetries = 4;
+    let delayMs = 1500;
+    let finalResponse: Response | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      finalResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: buildWhisperForm(audioFile, languageCode),
+      });
+
+      if (finalResponse.status !== 429) break;
+      if (attempt === maxRetries) break;
+
+      const retryAfter = Number(finalResponse.headers.get("retry-after"));
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : delayMs;
+
+      await sleep(waitMs);
+      delayMs = Math.min(delayMs * 2, 15000);
     }
 
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: whisperForm,
-    });
+    if (!finalResponse) {
+      throw new Error("Transcription request did not complete");
+    }
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    if (!finalResponse.ok) {
+      if (finalResponse.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Rate limit exceeded, please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Whisper is temporarily busy. Please wait 20-30 seconds and try again." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const errorText = await response.text();
-      console.error("Whisper API error:", response.status, errorText);
+
+      const errorText = await finalResponse.text();
+      console.error("Whisper API error:", finalResponse.status, errorText);
       return new Response(
         JSON.stringify({ error: "Transcription failed", details: errorText }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const result = await response.json();
-    const transcript = result.text?.trim() || "";
+    const result = await finalResponse.json();
+    const transcript = typeof result?.text === "string" ? result.text.trim() : "";
 
     return new Response(JSON.stringify({ transcript }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -82,7 +139,7 @@ serve(async (req) => {
     console.error("transcribe error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

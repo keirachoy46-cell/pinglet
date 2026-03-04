@@ -301,7 +301,10 @@ export default function ElderInterface() {
         } catch { /* ignore */ }
       } catch (err) {
         console.error("Q&A error:", err);
-        toast.error("Something went wrong. Please try again.");
+        const msg = err instanceof Error && err.message.includes("Rate limit")
+          ? "Transcription is busy right now. Please wait a little and try again."
+          : "Something went wrong. Please try again.";
+        toast.error(msg);
         setAskStep("record");
       }
     } else {
@@ -355,7 +358,10 @@ export default function ElderInterface() {
       } catch { /* ignore */ }
     } catch (err) {
       console.error("Mood entry error:", err);
-      toast.error("Something went wrong.");
+      const msg = err instanceof Error && err.message.includes("Rate limit")
+        ? "Transcription is busy right now. Please wait a little and try again."
+        : "Something went wrong.";
+      toast.error(msg);
       setMoodStep("score");
     }
   }, [elder, selectedMoodScore, selectedTags, transcribeAudio, generateAndPlayTTS]);
